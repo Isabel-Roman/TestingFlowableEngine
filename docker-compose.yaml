@@ -1,0 +1,35 @@
+services:
+  flowable-rest:
+    image: flowable/flowable-rest
+    container_name: flowable-rest-engine
+    ports:
+      - "8080:8080"
+    environment:
+      - SERVER_PORT=8080
+      - FLOWABLE_REST_APP_ADMIN_USER-ID=admin
+      - FLOWABLE_REST_APP_ADMIN_PASSWORD=test
+
+  flowable-auto-deployer:
+    image: curlimages/curl:latest
+    container_name: flowable-auto-deployer
+    volumes:
+      - ./processes:/processes
+    depends_on:
+      - flowable-rest
+    entrypoint: >
+      sh -c "
+        echo 'Esperando a que el motor Flowable esté iniciado y listo...';
+        until curl -s -f -u admin:test http://flowable-rest:8080/flowable-rest/service/management/engine > /dev/null; do
+          echo 'Motor aún no disponible, reintentando en 3 segundos...';
+          sleep 3;
+        done;
+        echo '¡Motor Flowable listo! Iniciando autodespliegue de modelos BPMN...';
+        for file in /processes/*.xml /processes/*.bpmn; do
+          if [ -f \"$$file\" ]; then
+            echo \"Desplegando: $$file\";
+            curl -u admin:test -F \"file=@$$file\" http://flowable-rest:8080/flowable-rest/service/repository/deployments;
+            echo '';
+          fi;
+        done;
+        echo 'Autodespliegue completado con éxito.';
+      "
